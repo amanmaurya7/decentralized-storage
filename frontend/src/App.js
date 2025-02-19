@@ -1,20 +1,161 @@
 import React, { useState } from "react";
-import { ethers } from "ethers";
+import { BrowserProvider, Contract } from "ethers";
 
-const contractAddress = "YOUR_CONTRACT_ADDRESS"; // Replace with your contract address
-const contractABI = [ /* Paste the ABI here */ ];
-
-function App() {
+const contractAddress = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"; // Replace with your contract address
+const contractABI = [
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "fileId",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "ipfsHash",
+          "type": "string"
+        },
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "owner",
+          "type": "address"
+        }
+      ],
+      "name": "FileUploaded",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "accessList",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "fileCount",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "name": "files",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "ipfsHash",
+          "type": "string"
+        },
+        {
+          "internalType": "address",
+          "name": "owner",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_fileId",
+          "type": "uint256"
+        }
+      ],
+      "name": "getFileHash",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_fileId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "_user",
+          "type": "address"
+        }
+      ],
+      "name": "grantAccess",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "_ipfsHash",
+          "type": "string"
+        }
+      ],
+      "name": "uploadFile",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ]
+  function App() {
     const [account, setAccount] = useState("");
     const [fileHash, setFileHash] = useState("");
     const [fileId, setFileId] = useState("");
 
     const connectWallet = async () => {
         if (window.ethereum) {
-            const provider = new ethers.providers.Web3Provider(window.ethereum);
-            await provider.send("eth_requestAccounts", []);
-            const signer = provider.getSigner();
-            setAccount(await signer.getAddress());
+            try {
+                const provider = new BrowserProvider(window.ethereum);
+                await provider.send("eth_requestAccounts", []);
+                const signer = await provider.getSigner();
+                setAccount(await signer.getAddress());
+            } catch (error) {
+                console.error("Error connecting to MetaMask:", error);
+                alert("Error connecting to MetaMask. Please try again.");
+            }
         } else {
             alert("Please install MetaMask!");
         }
@@ -22,21 +163,74 @@ function App() {
 
     const uploadFile = async () => {
         if (!fileHash) return alert("Please enter a file hash");
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
-        const signer = provider.getSigner();
-        const contract = new ethers.Contract(contractAddress, contractABI, signer);
-        const tx = await contract.uploadFile(fileHash);
-        await tx.wait();
-        alert("File uploaded successfully!");
+        try {
+            const provider = new BrowserProvider(window.ethereum);
+            const signer = await provider.getSigner();
+            const contract = new Contract(contractAddress, contractABI, signer);
+            const tx = await contract.uploadFile(fileHash);
+            const receipt = await tx.wait(); // Wait for the transaction to be mined
+    
+            // Extract the File ID from the event
+            const event = receipt.logs[0].args;
+            const fileId = event.fileId.toString();
+    
+            alert(`File uploaded successfully! File ID: ${fileId}`);
+        } catch (error) {
+            console.error("Error uploading file:", error);
+            alert("Error uploading file. Please try again.");
+        }
+    };
+
+    const fetchFileFromIPFS = async (ipfsHash) => {
+        const url = `https://ipfs.io/ipfs/${ipfsHash}`;
+        const response = await fetch(url);
+        const data = await response.blob(); // For binary files (e.g., images, PDFs)
+        return data;
+    };
+
+    // Save File ID to localStorage
+const saveFileId = (fileId) => {
+    const uploadedFiles = JSON.parse(localStorage.getItem("uploadedFiles") || []);
+    uploadedFiles.push(fileId);
+    localStorage.setItem("uploadedFiles", JSON.stringify(uploadedFiles));
+};
+
+// Retrieve File IDs from localStorage
+const getUploadedFiles = () => {
+    return JSON.parse(localStorage.getItem("uploadedFiles") || []);
+};
+
+    const getLatestFileId = async () => {
+        const provider = new BrowserProvider(window.ethereum);
+        const contract = new Contract(contractAddress, contractABI, provider);
+        const count = await contract.fileCount();
+        return count - 1;
     };
 
     const getFile = async () => {
         if (!fileId) return alert("Please enter a file ID");
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
-        const signer = provider.getSigner();
-        const contract = new ethers.Contract(contractAddress, contractABI, signer);
-        const hash = await contract.getFileHash(fileId);
-        alert(`File Hash: ${hash}`);
+        try {
+            const provider = new BrowserProvider(window.ethereum);
+            const signer = await provider.getSigner();
+            const contract = new Contract(contractAddress, contractABI, signer);
+            const hash = await contract.getFileHash(fileId);
+            alert(`File Hash: ${hash}`);
+
+            // Fetch the file from IPFS
+            const file = await fetchFileFromIPFS(hash);
+            console.log("File retrieved from IPFS:", file);
+
+            // Display the file (if it's an image)
+            if (file.type.startsWith("image/")) {
+                const url = URL.createObjectURL(file);
+                const img = document.createElement("img");
+                img.src = url;
+                document.body.appendChild(img);
+            }
+        } catch (error) {
+            console.error("Error retrieving file:", error);
+            alert("Error retrieving file. Please check the file ID and try again.");
+        }
     };
 
     return (
