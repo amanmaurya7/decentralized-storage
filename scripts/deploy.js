@@ -3,10 +3,12 @@ const hre = require("hardhat");
 async function main() {
     const FileStorage = await hre.ethers.getContractFactory("FileStorage");
     const fileStorage = await FileStorage.deploy();
-
-    await fileStorage.deployed();
-
-    console.log("FileStorage deployed to:", fileStorage.address);
+    
+    // Wait for deployment to complete
+    await fileStorage.waitForDeployment();
+    
+    // Get the contract address
+    console.log("FileStorage deployed to:", await fileStorage.getAddress());
 }
 
 main()
